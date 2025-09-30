@@ -6,70 +6,66 @@ let currentfolder;
 let currentsong = new Audio();
 
 const playMusic = (track) => {
-    currentsong.src = `/songs/${currentfolder}/` + track;
+    // Use relative path to your own server
+    currentsong.src = `songs/${currentfolder}/${track}`;
     currentsong.play();
 
     document.querySelector(".songinfo").innerHTML = track;
     document.querySelector(".songtime").innerHTML = "00:00/00:00";
 };
 
-
 // ---------------- GET SONGS ----------------
 async function getsongs(folder) {
     currentfolder = folder;
-    console.log("📂 Loading songs from folder via GitHub API:", folder);
+    console.log("📂 Loading songs from folder:", folder);
 
-    // GitHub API: list files inside folder
-    let apiUrl = `https://api.github.com/repos/jitendra-jitu/jitendra-jitu.github.io/contents/songs/${folder}`;
-    let res = await fetch(apiUrl);
-    let files = await res.json();
-
-    // only mp3 files
-    songs = files
-        .filter(f => f.name.endsWith(".mp3"))
-        .map(f => f.name);
-
-    console.log("🎵 Songs found:", songs);
-
-    let songsUl = document.querySelector(".songs-list ul");
-    songsUl.innerHTML = "";
-
-    // load info.json
-    let infoFile = files.find(f => f.name === "info.json");
-    let jsondata = { Name: folder };
-    if (infoFile) {
-        let infoRes = await fetch(infoFile.download_url);
-        jsondata = await infoRes.json();
+    try {
+        // Load info.json from your own server
+        let infoRes = await fetch(`songs/${folder}/info.json`);
+        let jsondata = await infoRes.json();
+        
+        console.log("🎵 Album info loaded:", jsondata);
+        
+        let songsUl = document.querySelector(".songs-list ul");
+        songsUl.innerHTML = "";
+        
+        // Use the songs list from info.json
+        if (jsondata.songs && Array.isArray(jsondata.songs)) {
+            songs = jsondata.songs;
+            
+            for (const song of songs) {
+                songsUl.innerHTML += `
+                    <li>
+                        <img src="svg/music.svg" alt="">
+                        <div class="info">
+                            <div>${song.name || song}</div>
+                            <div>${jsondata.Name}</div>
+                        </div>
+                        <div class="playnow">
+                            <span>playnow</span>
+                            <img class="invert" src="svg/playbtn.svg" alt="">
+                        </div>
+                    </li>`;
+            }
+            
+            // Add click listeners
+            Array.from(songsUl.getElementsByTagName("li")).forEach(e => {
+                e.addEventListener("click", () => {
+                    let track = e.querySelector(".info").firstElementChild.innerText.trim();
+                    console.log("🖱️ Song clicked:", track);
+                    playMusic(track);
+                    document.querySelector("#play").src = "svg/pause.svg";
+                });
+            });
+        }
+        
+        return songs || [];
+        
+    } catch (err) {
+        console.error("❌ Error loading album:", err);
+        return [];
     }
-
-    for (const song of songs) {
-        songsUl.innerHTML += `
-            <li>
-                <img src="svg/music.svg" alt="">
-                <div class="info">
-                    <div>${song}</div>
-                    <div>${jsondata.Name}</div>
-                </div>
-                <div class="playnow">
-                    <span>playnow</span>
-                    <img class="invert" src="svg/playbtn.svg" alt="">
-                </div>
-            </li>`;
-    }
-
-    // click listener
-    Array.from(songsUl.getElementsByTagName("li")).forEach(e => {
-        e.addEventListener("click", () => {
-            let track = e.querySelector(".info").firstElementChild.innerText.trim();
-            console.log("🖱️ Song clicked:", track);
-            playMusic(track);
-            document.querySelector("#play").src = "svg/pause.svg";
-        });
-    });
-
-    return songs;
 }
-
 
 // ---------------- TIME FORMAT ----------------
 function formatTime(seconds) {
@@ -82,32 +78,21 @@ function formatTime(seconds) {
     return `${formattedMinutes}:${formattedSeconds}`;
 }
 
-
 // ---------------- DISPLAY ALBUMS ----------------
 async function DisplayAlbums() {
-    console.log("📀 Loading albums via GitHub API...");
+    console.log("📀 Loading albums...");
 
-    let apiUrl = `https://api.github.com/repos/jitendra-jitu/jitendra-jitu.github.io/contents/songs`;
-    let res = await fetch(apiUrl);
-    let folders = await res.json();
+    try {
+        // Load albums list from your server
+        let albumsRes = await fetch('songs/albums.json');
+        let albums = await albumsRes.json();
+        
+        let cardContainer = document.querySelector(".cardcontainer");
+        cardContainer.innerHTML = "";
 
-    let cardContainer = document.querySelector(".cardcontainer");
-
-    for (const folder of folders) {
-        if (folder.type !== "dir") continue; // only directories
-
-        try {
-            let infoRes = await fetch(`https://api.github.com/repos/jitendra-jitu/jitendra-jitu.github.io/contents/songs/${folder.name}/info.json`);
-            let infoFile = await infoRes.json();
-            let jsondata = {};
-
-            if (infoFile.download_url) {
-                let metaRes = await fetch(infoFile.download_url);
-                jsondata = await metaRes.json();
-            }
-
+        for (const album of albums) {
             cardContainer.innerHTML += `
-                <div data-folder="${folder.name}" class="card">
+                <div data-folder="${album.folder}" class="card">
                     <svg class="play" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="50" height="50">
                         <defs>
                             <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -117,33 +102,33 @@ async function DisplayAlbums() {
                         <circle cx="12" cy="12" r="10" fill="#3fd671" filter="url(#dropShadow)" />
                         <polygon points="10,8 16,12 10,16" fill="black"/>
                     </svg>
-                    <img src="songs/${folder.name}/cover.jpeg" alt="">
-                    <h4>${jsondata.Name || folder.name}</h4>
-                    <p>${jsondata.Description || ""}</p>
+                    <img src="songs/${album.folder}/cover.jpeg" alt="${album.name}">
+                    <h4>${album.name}</h4>
+                    <p>${album.description || ""}</p>
                 </div>`;
-        } catch (err) {
-            console.error("❌ Could not load info.json for:", folder.name, err);
         }
-    }
 
-    // album click
-    setTimeout(() => {
-        Array.from(document.getElementsByClassName("card")).forEach(e => {
-            e.addEventListener("click", async item => {
-                let folder = item.currentTarget.dataset.folder;
-                console.log("🖱️ Album clicked:", folder);
-                let list = await getsongs(folder);
-                console.log("🎵 Songs loaded for album:", list);
-                if (list.length > 0) playMusic(list[0]);
+        // album click
+        setTimeout(() => {
+            Array.from(document.getElementsByClassName("card")).forEach(e => {
+                e.addEventListener("click", async item => {
+                    let folder = item.currentTarget.dataset.folder;
+                    console.log("🖱️ Album clicked:", folder);
+                    let list = await getsongs(folder);
+                    console.log("🎵 Songs loaded for album:", list);
+                    if (list.length > 0) playMusic(list[0]);
+                });
             });
-        });
-    }, 500);
+        }, 500);
+        
+    } catch (err) {
+        console.error("❌ Error loading albums:", err);
+    }
 }
-
 
 // ---------------- MAIN ----------------
 async function main() {
-    // load default album
+    // Your existing main function remains the same
     await getsongs("Manam");
     console.log("songs:", songs);
 
